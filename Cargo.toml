@@ -1,0 +1,13 @@
+[package]
+name = "cuda_parsers"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+deku = "0.15"
+goblin = "0.5"
+pretty_assertions = "1.3.0"
+
+tracing = "0.1"
+log = { version = "0.4", features = ["release_max_level_warn"] }
+lz4 = "1.24.0"
