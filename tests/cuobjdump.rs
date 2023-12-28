@@ -101,6 +101,7 @@ fn strip_non_nvinfo(target: String) -> String {
     out
 }
 
+/// Given a cubin path, run the real cuobjdump and our reimplementation
 fn test_cubin(cubin_path: &Path) {
     let cubin_path_str = cubin_path.to_str().unwrap();
 
@@ -125,7 +126,9 @@ fn test_cubin(cubin_path: &Path) {
     pretty_assertions::assert_eq!(ours, target);
 }
 
-fn main() {
+/// For each test file, compare the real cuobjdump output to the outupt of our reimplementation
+#[test]
+fn test_validate_output() {
     // let cubin_path = Path::new("test_data/cubins/libtorch_cuda.3022.sm_70.cubin");
     // test_cubin(&cubin_path);
 
