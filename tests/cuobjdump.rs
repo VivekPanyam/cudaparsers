@@ -1,13 +1,13 @@
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use std::{fs, process::Command};
-use std::fmt::Write;
 
-use cuda_parsers::cubin::{NVInfoValue, NVInfoSvalValue, NVInfoItem, NVInfoAttribute};
-
+use cuda_parsers::cubin::{NVInfoAttribute, NVInfoItem, NVInfoSvalValue, NVInfoValue};
 
 /// Display in the same format as cuobjdump
 fn cuobjdump_fmt<T>(data: T) -> String
-where T: IntoIterator<Item = (String, Vec<NVInfoItem>)>
+where
+    T: IntoIterator<Item = (String, Vec<NVInfoItem>)>,
 {
     let mut out = String::new();
 
@@ -20,43 +20,44 @@ where T: IntoIterator<Item = (String, Vec<NVInfoItem>)>
             writeln!(&mut out, "\tFormat:\t{:?}", attr.format).unwrap();
 
             match &attr.value {
-                NVInfoValue::NoValue(_) => {},
+                NVInfoValue::NoValue(_) => {}
                 NVInfoValue::BVal(val) => writeln!(&mut out, "\tValue:\t{:#x}", val).unwrap(),
                 NVInfoValue::HVal(val) => writeln!(&mut out, "\tValue:\t{:#x}", val).unwrap(),
-                NVInfoValue::SVal(val) => {
-                    match &val.value {
-                        NVInfoSvalValue::KParamInfoValue {
-                            index,
-                            ordinal,
-                            offset,
-                            log_alignment,
-                            space,
-                            cbank,
-                            is_cbank,
-                            size_bytes } => {
-                                let cbank_str = if *is_cbank { "CBANK" } else { "SMEM" };
-                                writeln!(&mut out, "\tValue:\tIndex : {index:#x}\tOrdinal : {ordinal:#x}\tOffset  : {offset:#x}\tSize    : {size_bytes:#x}").unwrap();
-                                writeln!(&mut out, "\t\tPointee's logAlignment : {log_alignment:#x}\tSpace : {space:#x}\tcbank : {cbank:#x}\tParameter Space : {cbank_str}\t").unwrap();
-                            },
-                        NVInfoSvalValue::ExternSValue { index, value } => {
-                            writeln!(&mut out, "\tValue:\texterns:\t{value}({index:#x})\t").unwrap();
-                        }
-                        NVInfoSvalValue::Other { data } if attr.attribute == NVInfoAttribute::EIATTR_ATOM16_EMUL_INSTR_REG_MAP => {
-                            write!(&mut out, "\tValue:\t").unwrap();
-                            assert!(data.len() % 2 == 0);
+                NVInfoValue::SVal(val) => match &val.value {
+                    NVInfoSvalValue::KParamInfoValue {
+                        index,
+                        ordinal,
+                        offset,
+                        log_alignment,
+                        space,
+                        cbank,
+                        is_cbank,
+                        size_bytes,
+                    } => {
+                        let cbank_str = if *is_cbank { "CBANK" } else { "SMEM" };
+                        writeln!(&mut out, "\tValue:\tIndex : {index:#x}\tOrdinal : {ordinal:#x}\tOffset  : {offset:#x}\tSize    : {size_bytes:#x}").unwrap();
+                        writeln!(&mut out, "\t\tPointee's logAlignment : {log_alignment:#x}\tSpace : {space:#x}\tcbank : {cbank:#x}\tParameter Space : {cbank_str}\t").unwrap();
+                    }
+                    NVInfoSvalValue::ExternSValue { index, value } => {
+                        writeln!(&mut out, "\tValue:\texterns:\t{value}({index:#x})\t").unwrap();
+                    }
+                    NVInfoSvalValue::Other { data }
+                        if attr.attribute == NVInfoAttribute::EIATTR_ATOM16_EMUL_INSTR_REG_MAP =>
+                    {
+                        write!(&mut out, "\tValue:\t").unwrap();
+                        assert!(data.len() % 2 == 0);
 
-                            for item in data.chunks(2) {
-                                write!(&mut out, "({:#x}, {})  ", item[0], item[1]).unwrap();
-                            }
-                            writeln!(&mut out).unwrap();
-                        },
-                        NVInfoSvalValue::Other { data } => {
-                            write!(&mut out, "\tValue:\t").unwrap();
-                            for item in data {
-                                write!(&mut out, "{:#x} ", item).unwrap();
-                            }
-                            writeln!(&mut out).unwrap();
-                        },
+                        for item in data.chunks(2) {
+                            write!(&mut out, "({:#x}, {})  ", item[0], item[1]).unwrap();
+                        }
+                        writeln!(&mut out).unwrap();
+                    }
+                    NVInfoSvalValue::Other { data } => {
+                        write!(&mut out, "\tValue:\t").unwrap();
+                        for item in data {
+                            write!(&mut out, "{:#x} ", item).unwrap();
+                        }
+                        writeln!(&mut out).unwrap();
                     }
                 },
             }
@@ -72,9 +73,10 @@ where T: IntoIterator<Item = (String, Vec<NVInfoItem>)>
 /// Runs cuobjdump on a file
 fn run_cuobjdump(path: &str) -> String {
     let out = Command::new("/usr/local/cuda-10.2/bin/cuobjdump")
-            .args(["-elf", path])
-            .output()
-            .unwrap().stdout;
+        .args(["-elf", path])
+        .output()
+        .unwrap()
+        .stdout;
 
     String::from_utf8(out).unwrap()
 }
@@ -107,7 +109,6 @@ fn test_cubin(cubin_path: &Path) {
 
     println!("Testing {}... ", &cubin_path_str);
 
-    
     let data = fs::read(&cubin_path).unwrap();
     let parsed = cuda_parsers::cubin::parse(&data).unwrap();
 
@@ -118,7 +119,7 @@ fn test_cubin(cubin_path: &Path) {
     while target.ends_with("\n") {
         target.pop();
     }
-    
+
     while ours.ends_with("\n") {
         ours.pop();
     }

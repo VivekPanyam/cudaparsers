@@ -1,4 +1,7 @@
-use std::{os::raw::{c_uint, c_ushort, c_ulong}, collections::HashMap};
+use std::{
+    collections::HashMap,
+    os::raw::{c_uint, c_ulong, c_ushort},
+};
 
 use crate::cubin::NVInfoItem;
 
@@ -10,7 +13,6 @@ struct FatbinHeader {
     header_size: c_ushort,
     fat_size: c_ulong, // not including this header
 }
-
 
 // TODO: static assert size is 64 bytes
 #[repr(C)]
@@ -32,16 +34,14 @@ struct FatbinData {
     uncompressed_payload: c_ulong,
 }
 
-pub fn is_fatbin(fat_cubin: *const ::std::os::raw::c_void,) -> bool {
+pub fn is_fatbin(fat_cubin: *const ::std::os::raw::c_void) -> bool {
     let header = unsafe { &*(fat_cubin as *const FatbinHeader) };
 
     // Check magic for the binary
     header.magic == 0xBA55ED50
 }
 
-pub fn get_fatbin_size(
-    fat_cubin: *const ::std::os::raw::c_void,
-) -> usize {
+pub fn get_fatbin_size(fat_cubin: *const ::std::os::raw::c_void) -> usize {
     let header = unsafe { &*(fat_cubin as *const FatbinHeader) };
 
     // Check magic for the binary
@@ -79,7 +79,11 @@ pub unsafe fn parse(mut data_ptr: *const u8) -> HashMap<u32, HashMap<String, Vec
         log::trace!("NEW CUBIN: {:#?}", data);
 
         assert!(data.version == 0x0101 && (data.kind == 1 || data.kind == 2));
-        log::trace!("{}_{}", if data.kind == 1 {"ptx"} else {"sm"}, data.sm_version);
+        log::trace!(
+            "{}_{}",
+            if data.kind == 1 { "ptx" } else { "sm" },
+            data.sm_version
+        );
 
         // Skip the rest of the data header
         data_ptr = data_ptr.add(data.header_size as usize);
@@ -90,14 +94,18 @@ pub unsafe fn parse(mut data_ptr: *const u8) -> HashMap<u32, HashMap<String, Vec
             let compressed_data = std::slice::from_raw_parts(data_ptr, data.payload_size as _);
             data_ptr = data_ptr.add(data.padded_payload_size as _);
 
-            let out = lz4::block::decompress(compressed_data, Some(data.uncompressed_payload as _)).unwrap();
+            let out = lz4::block::decompress(compressed_data, Some(data.uncompressed_payload as _))
+                .unwrap();
 
             if out.len() != data.uncompressed_payload as usize {
-                panic!("Decompressed size {} does not match target {}", out.len(), data.uncompressed_payload);
+                panic!(
+                    "Decompressed size {} does not match target {}",
+                    out.len(),
+                    data.uncompressed_payload
+                );
             }
 
             out
-
         } else {
             let s = std::slice::from_raw_parts(data_ptr, data.padded_payload_size as _);
 
@@ -125,7 +133,6 @@ pub unsafe fn parse(mut data_ptr: *const u8) -> HashMap<u32, HashMap<String, Vec
         }
 
         remaining_size -= data.header_size as u64 + data.padded_payload_size as u64;
-
     }
 
     out

@@ -7,11 +7,14 @@ pub struct NVInfoItem {
     pub format: NVInfoFormat,
     pub attribute: NVInfoAttribute,
     #[deku(ctx = "*format, *attribute")]
-    pub value: NVInfoValue
+    pub value: NVInfoValue,
 }
 
 #[derive(Debug, PartialEq, DekuRead)]
-#[deku(ctx = "format: NVInfoFormat, attribute: NVInfoAttribute", id = "format")]
+#[deku(
+    ctx = "format: NVInfoFormat, attribute: NVInfoAttribute",
+    id = "format"
+)]
 pub enum NVInfoValue {
     #[deku(id = "NVInfoFormat::EIFMT_NVAL")]
     NoValue(u16),
@@ -53,7 +56,7 @@ pub enum NVInfoSvalValue {
         // Read into a temp variable and then extract the bits manually
         #[deku(temp)]
         tmp: u32,
-        
+
         #[deku(skip, default = "(tmp & 0xff) as _")]
         log_alignment: u8,
 
@@ -82,7 +85,7 @@ pub enum NVInfoSvalValue {
     #[deku(id_pat = "_")]
     Other {
         #[deku(bytes_read = "value_size")]
-        data: Vec<u32>
+        data: Vec<u32>,
     },
 }
 
@@ -171,28 +174,13 @@ pub enum NVInfoAttribute {
     EIATTR_INSTR_REG_MAP,
 }
 
-pub fn get_elf_size(data: *const u8) -> u64 {
-    // This is not ideal
-    let data = unsafe {
-        // 64 bit elf headers are 64 bytes long
-        std::slice::from_raw_parts(data, 64)
-    };
-
-    let header = goblin::elf::Elf::parse_header(data).unwrap();
-
-    // Not sure if this is entirely correct
-    // https://stackoverflow.com/a/39558498
-    header.e_shoff + (header.e_shnum as u64 * header.e_shentsize as u64)
-}
-
 pub fn parse(data: &[u8]) -> Result<Vec<(String, Vec<NVInfoItem>)>, deku::DekuError> {
     if let Object::Elf(elf) = Object::parse(data).unwrap() {
-
         let mut out: Vec<(String, Vec<NVInfoItem>)> = Vec::new();
 
         for section in elf.section_headers {
             let section_name = &elf.shdr_strtab[section.sh_name];
-            
+
             if !section_name.starts_with(".nv.info.") {
                 // Only looking at function info
                 continue;
@@ -200,7 +188,7 @@ pub fn parse(data: &[u8]) -> Result<Vec<(String, Vec<NVInfoItem>)>, deku::DekuEr
 
             let frange = section.file_range().unwrap();
             let mut bit_offset = 0;
-            let mut section_data = &data[frange.start .. frange.end];
+            let mut section_data = &data[frange.start..frange.end];
 
             // println!("SECTION: {}", section_name);
 
