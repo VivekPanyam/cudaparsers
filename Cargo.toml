@@ -2,6 +2,15 @@
 name = "cuda_parsers"
 version = "0.1.0"
 edition = "2021"
+authors = ["Vivek Panyam <hello@vivekpanyam.com>"]
+description = "Parsers for CUDA binary files."
+license = "Apache-2.0"
+repository = "https://github.com/VivekPanyam/cudaparsers"
+keywords = ["cuda", "parser", "cubin", "fatbin", "gpu"]
+categories = ["encoding", "parser-implementations", "parsing"]
+
+# Ignore the test_data folder
+exclude = ["test_data/"]
 
 [dependencies]
 deku = "0.15"
