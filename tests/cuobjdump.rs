@@ -74,7 +74,7 @@ where
 /// TODO: the majority of execution CPU usage is from running the external cuobjdump process.
 /// We could cache the results of the external cuobjdump to make subsequent runs much faster
 async fn run_cuobjdump(path: &str) -> String {
-    let out = tokio::process::Command::new("/usr/local/cuda-10.2/bin/cuobjdump")
+    let out = tokio::process::Command::new("cuobjdump")
         .args(["-elf", path])
         .output()
         .await

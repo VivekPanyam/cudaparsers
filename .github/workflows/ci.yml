@@ -1,0 +1,46 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  formatting:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - run: cargo fmt --check
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - run: rustup toolchain install stable --profile minimal
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cuobjdump
+        run: >
+          cd /tmp &&
+          wget https://developer.download.nvidia.com/compute/cuda/redist/cuda_cuobjdump/linux-x86_64/cuda_cuobjdump-linux-x86_64-12.3.101-archive.tar.xz &&
+          tar -xvf cuda_cuobjdump-linux-x86_64-12.3.101-archive.tar.xz &&
+          mv /tmp/cuda_cuobjdump-linux-x86_64-12.3.101-archive/bin/cuobjdump /usr/local/bin
+      - name: Fetch PyTorch
+        run: >
+          cd /tmp &&
+          wget https://files.pythonhosted.org/packages/09/e0/03c31c44805679550fce01bb1de47b32aab06e677c8afc5c91bc2fd68e7c/torch-1.12.0-cp37-cp37m-manylinux1_x86_64.whl &&
+          unzip torch-1.12.0-cp37-cp37m-manylinux1_x86_64.whl
+      - name: Extract cubin files
+        run: >
+          mkdir test_data/cubins &&
+          cd test_data/cubins &&
+          cuobjdump --extract-elf all /tmp/torch/lib/libtorch_cuda.so
+      - name: Run tests
+        run: cargo test --release -- --nocapture
+        env:
+          RUST_LOG: info
