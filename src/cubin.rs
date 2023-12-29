@@ -190,7 +190,7 @@ pub fn parse(data: &[u8]) -> Result<Vec<(String, Vec<NVInfoItem>)>, deku::DekuEr
             let mut bit_offset = 0;
             let mut section_data = &data[frange.start..frange.end];
 
-            // println!("SECTION: {}", section_name);
+            log::trace!("SECTION: {}", section_name);
 
             let mut output_sections = Vec::new();
             while section_data.len() > 0 {
@@ -212,7 +212,7 @@ pub fn parse(data: &[u8]) -> Result<Vec<(String, Vec<NVInfoItem>)>, deku::DekuEr
                 }
 
                 (section_data, bit_offset) = a;
-                // println!("{:#?}", &parsed);
+                log::trace!("{:#?}", &parsed);
                 output_sections.push(parsed);
             }
 

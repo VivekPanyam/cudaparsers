@@ -107,7 +107,7 @@ fn strip_non_nvinfo(target: String) -> String {
 fn test_cubin(cubin_path: &Path) {
     let cubin_path_str = cubin_path.to_str().unwrap();
 
-    println!("Testing {}... ", &cubin_path_str);
+    log::info!("Testing {}... ", &cubin_path_str);
 
     let data = fs::read(&cubin_path).unwrap();
     let parsed = cuda_parsers::cubin::parse(&data).unwrap();
@@ -130,6 +130,7 @@ fn test_cubin(cubin_path: &Path) {
 /// For each test file, compare the real cuobjdump output to the outupt of our reimplementation
 #[test]
 fn test_validate_output() {
+    let _ = env_logger::builder().is_test(true).try_init();
     // let cubin_path = Path::new("test_data/cubins/libtorch_cuda.3022.sm_70.cubin");
     // test_cubin(&cubin_path);
 
