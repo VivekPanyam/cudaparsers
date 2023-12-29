@@ -1,8 +1,11 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
+use async_compression::tokio::bufread::ZstdDecoder;
+use async_compression::tokio::write::ZstdEncoder;
 use cuda_parsers::cubin::{NVInfoAttribute, NVInfoItem, NVInfoSvalValue, NVInfoValue};
 use futures::StreamExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// Display in the same format as cuobjdump
 fn cuobjdump_fmt<T>(data: T) -> String
@@ -71,15 +74,34 @@ where
 }
 
 /// Runs cuobjdump on a file
-/// TODO: the majority of execution CPU usage is from running the external cuobjdump process.
-/// We could cache the results of the external cuobjdump to make subsequent runs much faster
-async fn run_cuobjdump(path: &str) -> String {
+/// Because running the external cuobjdump process takes the majority of execution time, we cache the results
+/// This makes the overall test suite run ~20x faster
+async fn run_cuobjdump(cache_base_dir: &Path, path: &Path) -> String {
+    // This isn't particularly robust, but it's good enough for this usecase
+    let cache_key = path.file_name().unwrap();
+    let cache_path = cache_base_dir.join(cache_key);
+    if tokio::fs::try_exists(&cache_path).await.unwrap() {
+        // We can just return the cached value
+        let f = tokio::fs::File::open(cache_path).await.unwrap();
+        let br = tokio::io::BufReader::new(f);
+        let mut d = ZstdDecoder::new(br);
+        let mut out = String::new();
+        d.read_to_string(&mut out).await.unwrap();
+        return out;
+    }
+
     let out = tokio::process::Command::new("cuobjdump")
-        .args(["-elf", path])
+        .args(["-elf", path.to_str().unwrap()])
         .output()
         .await
         .unwrap()
         .stdout;
+
+    // Compress and write the cached output
+    let f = tokio::fs::File::create(cache_path).await.unwrap();
+    let mut e = ZstdEncoder::new(f);
+    e.write_all(&out).await.unwrap();
+    e.shutdown().await.unwrap();
 
     String::from_utf8(out).unwrap()
 }
@@ -107,10 +129,10 @@ fn strip_non_nvinfo(target: String) -> String {
 }
 
 /// Given a cubin path, run the real cuobjdump and our reimplementation
-async fn test_cubin<P: AsRef<Path>>(cubin_path: P) {
-    let cubin_path_str = cubin_path.as_ref().to_str().unwrap();
+async fn test_cubin(cache_base_dir: PathBuf, cubin_path: PathBuf) {
+    let cubin_path = cubin_path.as_ref();
 
-    log::info!("Testing {}... ", &cubin_path_str);
+    log::info!("Testing {:?}... ", cubin_path);
 
     let data = tokio::fs::read(&cubin_path).await.unwrap();
     let mut ours = tokio::task::spawn_blocking(move || {
@@ -120,7 +142,7 @@ async fn test_cubin<P: AsRef<Path>>(cubin_path: P) {
     .await
     .unwrap();
 
-    let target = run_cuobjdump(&cubin_path_str).await;
+    let target = run_cuobjdump(&cache_base_dir, cubin_path).await;
 
     let mut target = strip_non_nvinfo(target);
     while target.ends_with("\n") {
@@ -142,12 +164,17 @@ async fn test_validate_output() {
     // test_cubin(&cubin_path);
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+    // Create our cache dir if necessary
+    let cache_dir = base_path.join("test_data/cache/");
+    std::fs::create_dir_all(base_path.join("test_data/cache/")).unwrap();
+
     let paths = std::fs::read_dir(base_path.join("test_data/cubins/")).unwrap();
 
     let _ = futures::stream::iter(paths)
         .map(|entry| {
             let cubin_path = entry.unwrap().path();
-            test_cubin(cubin_path)
+            test_cubin(cache_dir.clone(), cubin_path)
         })
         .buffer_unordered(20)
         .count()
