@@ -1,8 +1,8 @@
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
-use std::{fs, process::Command};
 
 use cuda_parsers::cubin::{NVInfoAttribute, NVInfoItem, NVInfoSvalValue, NVInfoValue};
+use futures::StreamExt;
 
 /// Display in the same format as cuobjdump
 fn cuobjdump_fmt<T>(data: T) -> String
@@ -71,10 +71,13 @@ where
 }
 
 /// Runs cuobjdump on a file
-fn run_cuobjdump(path: &str) -> String {
-    let out = Command::new("/usr/local/cuda-10.2/bin/cuobjdump")
+/// TODO: the majority of execution CPU usage is from running the external cuobjdump process.
+/// We could cache the results of the external cuobjdump to make subsequent runs much faster
+async fn run_cuobjdump(path: &str) -> String {
+    let out = tokio::process::Command::new("/usr/local/cuda-10.2/bin/cuobjdump")
         .args(["-elf", path])
         .output()
+        .await
         .unwrap()
         .stdout;
 
@@ -104,16 +107,20 @@ fn strip_non_nvinfo(target: String) -> String {
 }
 
 /// Given a cubin path, run the real cuobjdump and our reimplementation
-fn test_cubin(cubin_path: &Path) {
-    let cubin_path_str = cubin_path.to_str().unwrap();
+async fn test_cubin<P: AsRef<Path>>(cubin_path: P) {
+    let cubin_path_str = cubin_path.as_ref().to_str().unwrap();
 
     log::info!("Testing {}... ", &cubin_path_str);
 
-    let data = fs::read(&cubin_path).unwrap();
-    let parsed = cuda_parsers::cubin::parse(&data).unwrap();
+    let data = tokio::fs::read(&cubin_path).await.unwrap();
+    let mut ours = tokio::task::spawn_blocking(move || {
+        let parsed = cuda_parsers::cubin::parse(&data).unwrap();
+        cuobjdump_fmt(parsed)
+    })
+    .await
+    .unwrap();
 
-    let mut ours = cuobjdump_fmt(parsed);
-    let target = run_cuobjdump(&cubin_path_str);
+    let target = run_cuobjdump(&cubin_path_str).await;
 
     let mut target = strip_non_nvinfo(target);
     while target.ends_with("\n") {
@@ -128,17 +135,21 @@ fn test_cubin(cubin_path: &Path) {
 }
 
 /// For each test file, compare the real cuobjdump output to the outupt of our reimplementation
-#[test]
-fn test_validate_output() {
+#[tokio::test]
+async fn test_validate_output() {
     let _ = env_logger::builder().is_test(true).try_init();
     // let cubin_path = Path::new("test_data/cubins/libtorch_cuda.3022.sm_70.cubin");
     // test_cubin(&cubin_path);
 
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let paths = fs::read_dir(base_path.join("test_data/cubins/")).unwrap();
+    let paths = std::fs::read_dir(base_path.join("test_data/cubins/")).unwrap();
 
-    for path in paths {
-        let cubin_path = path.unwrap().path();
-        test_cubin(&cubin_path);
-    }
+    let _ = futures::stream::iter(paths)
+        .map(|entry| {
+            let cubin_path = entry.unwrap().path();
+            test_cubin(cubin_path)
+        })
+        .buffer_unordered(20)
+        .count()
+        .await;
 }
